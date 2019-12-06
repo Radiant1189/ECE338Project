@@ -30,8 +30,9 @@ architecture sq_ball_arch of pong_graph_st is
 -- For right bar
    constant BAR1_X_L: integer := 600;
    constant BAR1_X_R: integer := 603;
-   signal bar1_y_t, bar1_y_b: unsigned(9 downto 0);
+   signal bar1_y_t, bar1_y_b, bar1_y_m: unsigned(9 downto 0);
    constant BAR1_Y_SIZE: integer := 72;
+   constant BAR1_YH_SIZE: integer := 31;
 
 -- Variable for general score
    signal xp_score_val: unsigned(6 downto 0);
@@ -43,13 +44,18 @@ architecture sq_ball_arch of pong_graph_st is
 
 -- To track player 2 score
    signal score2_reg, score2_next: unsigned(6 downto 0);
-   signal SCORE_UP: unsigned(6 downto 0) := to_unsigned(1,7);
+   signal score2_add_reg, score2_add_next: unsigned(6 downto 0);
+   
+-- Adding / Subtracting scores
+   constant SCORE_UP: unsigned(6 downto 0) := to_unsigned(1,7);
+   constant SCORE_DOWN: unsigned(6 downto 0) := unsigned(to_signed(-1,7));
    
 -- For left bar
    constant BAR2_X_L: integer := 32;
    constant BAR2_X_R: integer := 35;
-   signal bar2_y_t, bar2_y_b: unsigned(9 downto 0);
+   signal bar2_y_t, bar2_y_b, bar2_y_m: unsigned(9 downto 0);
    constant BAR2_Y_SIZE: integer := 72;
+   constant BAR2_YH_SIZE: integer := 31;
 
    signal bar1_y_reg, bar1_y_next: unsigned(9 downto 0);
    signal bar2_y_reg, bar2_y_next: unsigned(9 downto 0);
@@ -73,9 +79,9 @@ architecture sq_ball_arch of pong_graph_st is
       unsigned(9 downto 0);
 
    constant BALL_V_P: unsigned(9 downto 0):=
-   		to_unsigned(2,10);
+   		to_unsigned(4,10);
    constant BALL_V_N: unsigned(9 downto 0):=
-   		unsigned(to_signed(-2,10));
+   		unsigned(to_signed(-4,10));
 
    type rom_type is array( 0 to 7) of
    		std_logic_vector(0 to 7);
@@ -346,6 +352,7 @@ architecture sq_ball_arch of pong_graph_st is
    		   score1_reg <= (others => '0');
    		   score2_reg <= (others => '0');
    		   score1_add_reg <= (others => '0');
+   		   score2_add_reg <= (others => '0');
    		   ball_x_reg <= (others => '0');
    		   ball_y_reg <= (others => '0');
    		   x_delta_reg <= ("0000000100");
@@ -356,6 +363,7 @@ architecture sq_ball_arch of pong_graph_st is
            score1_reg <= score1_next;
            score2_reg <= score2_next;
            score1_add_reg <= score1_add_next;
+           score2_add_reg <= score2_add_next;
            ball_x_reg <= ball_x_next;
            ball_y_reg <= ball_y_next;
            x_delta_reg <= x_delta_next;
@@ -374,6 +382,7 @@ architecture sq_ball_arch of pong_graph_st is
 --    wall_rgb <= "001"; -- red
 
     bar1_y_t <= bar1_y_reg;
+    bar1_y_m <= bar1_y_reg + BAR1_YH_SIZE;
     bar1_y_b <= bar1_y_t + BAR1_Y_SIZE - 1;
     bar1_on <= '1' when (BAR1_X_L <= pix_x) and
     	(pix_x <= BAR1_X_R) and (bar1_y_t <= pix_y) and
@@ -381,6 +390,7 @@ architecture sq_ball_arch of pong_graph_st is
     bar_rgb <= "010"; -- blue
     
     bar2_y_t <= bar2_y_reg;
+    bar2_y_m <= bar2_y_reg + BAR2_YH_SIZE;
     bar2_y_b <= bar2_y_t + BAR2_Y_SIZE - 1;
     bar2_on <= '1' when (BAR2_X_L <= pix_x) and
     	(pix_x <= BAR2_X_R) and (bar2_y_t <= pix_y) and
@@ -449,15 +459,20 @@ end process;
 			 refr_tick = '1' else ball_x_reg;
 	  ball_y_next <= ball_y_reg + y_delta_reg when
 			 refr_tick = '1' else ball_y_reg;
-      score1_next <= score1_reg + score1_add_reg when
-             refr_tick = '1' else score1_reg; 
+			 
+      --Keep track of each player's score
+      score1_next <= score1_reg + score1_add_reg when 
+             
+      score2_next <= score2_reg + score2_add_reg;
+       
 	  -- Set the value of the next ball position according to
 	  -- the boundaries.
 	  process(x_delta_reg, y_delta_reg, score1_add_reg, ball_y_t, ball_x_l, ball_x_r, ball_y_t, ball_y_b, bar1_y_t, bar1_y_b, bar2_y_t, bar2_y_b)
 		  begin
 		  x_delta_next <= x_delta_reg;
 		  y_delta_next <= y_delta_reg;
-		  score1_add_next <= score1_add_reg;
+		  score1_add_next <= "0000000";
+		  score2_add_next <= "0000000";
 	  -- ball reached top, make offset positive
 		  if ( ball_y_t < 1 ) then
 			  y_delta_next <= BALL_V_P;
@@ -467,24 +482,36 @@ end process;
 	  -- Reached right, rebound.
 	      elsif (ball_x_r > (MAX_X - 1)) then
 	          x_delta_next <= BALL_V_N;
+	          score1_add_next <= SCORE_UP;
 	  -- Reached left, rebound.
 	      elsif (ball_x_l < 1 ) then
 	          x_delta_next <= BALL_V_P;
+	          score2_add_next <= SCORE_UP;
 	  -- left corner of ball inside bar2,
 		  elsif (( ball_x_l <= BAR2_X_R ) and 
 		  (BAR2_X_L <= ball_x_l)) then
       --some portion of ball hitting paddle, reverse dir
 		      if ((bar2_y_t <= ball_y_b) and
+		      (ball_y_t <= bar2_y_m)) then
+		           x_delta_next <= BALL_V_P;
+		           y_delta_next <= BALL_V_N;
+		       elsif ((bar2_y_m <= ball_y_b) and
 		      (ball_y_t <= bar2_y_b)) then
-		       x_delta_next <= BALL_V_P;
+		          x_delta_next <= BALL_V_N;
+		          y_delta_next <= BALL_V_P;
 		  end if;
 	  -- right corner of ball inside bar1
 		  elsif ((BAR1_X_L <= ball_x_r) and 
 		  (ball_x_r <= BAR1_X_R)) then
-	  -- some portion of ball hitting paddle, reverse dir
+	  -- some portion of ball hitting paddle, Upper half of bar or lower half of bar
 		      if ((bar1_y_t <= ball_y_b) and
+		      (ball_y_t <= bar1_y_m)) then
+		          x_delta_next <= BALL_V_P;
+		          y_delta_next <= BALL_V_N;
+		      elsif ((bar1_y_m <= ball_y_b) and
 		      (ball_y_t <= bar1_y_b)) then
-		      x_delta_next <= BALL_V_N;
+		          x_delta_next <= BALL_V_P;
+		          y_delta_next <= BALL_V_P;
 	      end if;
     end if;
 end process;
@@ -513,10 +540,10 @@ process(p1_score_on, p2_score_on, xp_score_val, score1_next, score2_next)
             begin
             xp_score_val <= "0000000";
             if(sq_score1_on = '1') then
-                xp_score_val <= "0000010";
+                xp_score_val <= score1_next;
             end if;
             if(sq_score2_on = '1') then
-                xp_score_val <= "0000100";
+                xp_score_val <= "0001000";
             end if;
             case(xp_score_val) is
                 when "0000000" =>
