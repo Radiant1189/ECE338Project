@@ -106,7 +106,7 @@ constant WALL_X_R: integer := 35;
    signal rom_data: std_logic_vector(7 downto 0);
    signal rom_bit: std_logic;
    
-   -- rom for score listing
+   -- rom_type for score listing and words
    type word_rom_type is array(0 to 7) of 
          std_logic_vector(0 to 31);
    constant SCORE_ROM: word_rom_type:= (
@@ -118,11 +118,45 @@ constant WALL_X_R: integer := 35;
         "00101001001001001001010001000000",
         "00010000110000110001001001111000",
         "00000000000000000000000000000000");
+   
+   constant P2WIN_ROM: word_rom_type:= (
+        "00000000000000000000000000000000",
+        "01110011000101010111010001001100",
+        "01001100100101010010011001010010",
+        "01001001000101010010010101010000",
+        "01110010000101010010010011001100",
+        "01000100000010100010010001000010",
+        "01000111100010100111010001011100",
+        "00000000000000000000000000000000");
+        
+    constant P1WIN_ROM: word_rom_type:= (
+        "00000000000000000000000000000000",
+        "01110001000101010111010001001100",
+        "01001011000101010010011001010010",
+        "01001101000101010010010101010000",
+        "01110001000101010010010011001100",
+        "01000001000010100010010001000010",
+        "01000111100010100111010001011100",
+        "00000000000000000000000000000000");
+        
     
+   -- For SCORE word generation
    signal rom_addrS: unsigned(2 downto 0); 
    signal rom_colS: unsigned(4 downto 0);
    signal rom_dataS: std_logic_vector(0 to 31);
    signal rom_bitS: std_logic;
+   
+   -- For P1 WINS word generation
+   signal rom_addrP1: unsigned(2 downto 0); 
+   signal rom_colP1: unsigned(4 downto 0);
+   signal rom_dataP1: std_logic_vector(0 to 31);
+   signal rom_bitP1: std_logic;
+   
+   --For P2 WINS word generation
+   signal rom_addrP2: unsigned(2 downto 0); 
+   signal rom_colP2: unsigned(4 downto 0);
+   signal rom_dataP2: std_logic_vector(0 to 31);
+   signal rom_bitP2: std_logic;
         
    
    type score_rom_type is array(0 to 15) of 
@@ -318,7 +352,7 @@ constant WALL_X_R: integer := 35;
    signal rom_dataN2: std_logic_vector(0 to 15);
    signal rom_bitN2: std_logic;
    
-   --tiles for score
+   --tiles for scores
    signal p1_x_l, p1_x_r: unsigned(9 downto 0);
    signal p1_y_t, p1_y_b: unsigned(9 downto 0);
    constant P1_X_BOX: unsigned(9 downto 0):=
@@ -333,7 +367,7 @@ constant WALL_X_R: integer := 35;
    		unsigned(to_signed(0,10));
    signal p1_score_on, sq_score1_on, p2_score_on, sq_score2_on: std_logic;
    
-   -- tiles for word score
+   -- tile for word score
    signal score_x_l, score_x_r: unsigned(9 downto 0);
    signal score_y_t, score_y_b: unsigned(9 downto 0);
    constant SCORE_X_BOX: unsigned(9 downto 0):=
@@ -341,6 +375,25 @@ constant WALL_X_R: integer := 35;
    constant SCORE_Y_BOX: unsigned(9 downto 0):=
    		unsigned(to_signed(0,10)); 
    signal word_score_on, sq_word_on: std_logic;
+   
+   --tile for word P1 WINS
+   signal p1win_x_l, p1win_x_r: unsigned(9 downto 0);
+   signal p1win_y_t, p1win_y_b: unsigned(9 downto 0);
+   constant P1WIN_X_BOX: unsigned(9 downto 0):=
+   		to_unsigned(128,10);
+   constant P1WIN_Y_BOX: unsigned(9 downto 0):=
+   		unsigned(to_signed(128,10)); 
+   signal word_p1win_on, sq_p1win_on: std_logic;
+   
+   --tile for word P2 WINS
+   signal p2win_x_l, p2win_x_r: unsigned(9 downto 0);
+   signal p2win_y_t, p2win_y_b: unsigned(9 downto 0);
+   constant P2WIN_X_BOX: unsigned(9 downto 0):=
+   		to_unsigned(448,10);
+   constant P2WIN_Y_BOX: unsigned(9 downto 0):=
+   		unsigned(to_signed(128,10)); 
+   signal word_p2win_on, sq_p2win_on: std_logic;
+   
    
       
 
@@ -498,10 +551,12 @@ end process;
 --		  score1 <= '0'; score2 <= '0';
 	  -- ball reached top, make offset positive
 	      if ((score1_reg >= 10) or (score2_reg >= 10)) then
-	           if (score1_reg > 10) then
+	           if (score1_reg >= 10) then
 	               win_score1_trig <= '1';
-	           elsif (score2_reg <= 10) then
+	               center <= '1';
+	           elsif (score2_reg >= 10) then
 	               win_score2_trig <= '1';
+	               center <= '1';
 	           end if;
 		  elsif ( ball_y_t < 1 ) then
 			  y_delta_next <= BALL_V_P;
@@ -779,7 +834,7 @@ process(p1_score_on, xp_score1_val, score1_reg)
     sq_word_on <= '1' when (score_x_l <= pix_x) and
 			(pix_x <= score_x_r) and (score_y_t <= pix_y) and
 			(pix_y <= score_y_b) else '0';
-  --Set down tiles for Player scores
+  --Set down tiles for word score
      score_x_l <= SCORE_X_BOX; -- SCORE placement
      score_y_t <= SCORE_Y_BOX;
      score_x_r <= score_x_l + 31;
@@ -796,6 +851,49 @@ process(p1_score_on, xp_score1_val, score1_reg)
     word_score_on <= '1' when (sq_word_on = '1') and
           (rom_bitS = '1') else '0';
     score_rgb <= "111"; -- White
+    
+    --Pixel within word P1WINS
+    sq_p1win_on <= '1' when (p1win_x_l <= pix_x) and
+			(pix_x <= p1win_x_r) and (p1win_y_t <= pix_y) and
+			(pix_y <= p1win_y_b) and win_score1_trig = '1' else '0';
+    --Set down tiles for word P1 WINS
+     p1win_x_l <= P1WIN_X_BOX; -- SCORE placement
+     p1win_y_t <= P1WIN_Y_BOX;
+     p1win_x_r <= p1win_x_l + 31;
+     p1win_y_b <= p1win_y_t + 7;
+     
+    rom_addrP1 <= pix_y(2 downto 0);
+	-- ROM column
+	rom_colP1 <= pix_x(4 downto 0);
+	-- Get row data
+	rom_dataP1 <= P1WIN_ROM(to_integer(rom_addrP1));
+    -- Get column bit
+    rom_bitP1 <= rom_dataP1(to_integer(rom_colP1));
+    -- Turn word on only if within square and ROM bit is 1.
+    word_p1win_on <= '1' when (sq_p1win_on = '1') and
+          (rom_bitP1 = '1') else '0';
+--    score_rgb <= "111"; -- White
+
+--Pixel within word P1WINS
+    sq_p2win_on <= '1' when (p2win_x_l <= pix_x) and
+			(pix_x <= p2win_x_r) and (p2win_y_t <= pix_y) and
+			(pix_y <= p2win_y_b) and win_score2_trig = '1' else '0';
+    --Set down tiles for word P1 WINS
+     p2win_x_l <= P2WIN_X_BOX; -- SCORE placement
+     p2win_y_t <= P2WIN_Y_BOX;
+     p2win_x_r <= p2win_x_l + 31;
+     p2win_y_b <= p2win_y_t + 7;
+     
+    rom_addrP2 <= pix_y(2 downto 0);
+	-- ROM column
+	rom_colP2 <= pix_x(4 downto 0);
+	-- Get row data
+	rom_dataP2 <= P2WIN_ROM(to_integer(rom_addrP2));
+    -- Get column bit
+    rom_bitP2 <= rom_dataP2(to_integer(rom_colP2));
+    -- Turn word on only if within square and ROM bit is 1.
+    word_p2win_on <= '1' when (sq_p2win_on = '1') and
+          (rom_bitP2 = '1') else '0';	
     
     process (video_on, wall_on, bar1_on, rd_ball_on, wall_rgb, bar_rgb, ball_rgb, num1_rgb, num2_rgb, p1_score_on, p2_score_on, word_score_on, score_rgb, bar2_on)
 		  begin
@@ -814,6 +912,10 @@ process(p1_score_on, xp_score1_val, score1_reg)
 			      graph_rgb <= num2_rgb;
 			  elsif (word_score_on = '1') then
 			      graph_rgb <= score_rgb;
+			  elsif (word_p1win_on = '1') then
+			      graph_rgb <= "111";
+			  elsif (word_p2win_on = '1') then
+			      graph_rgb <= "111";
 			  else
 				  graph_rgb <= "000"; -- yellow bkgnd
 			  end if;
