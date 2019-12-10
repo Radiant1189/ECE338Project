@@ -504,7 +504,7 @@ constant WALL_X_R: integer := 35;
 		end if;
 end process;
 
-    process( bar2_y_reg, bar2_y_b, bar2_y_t, refr_tick, btn)
+    process( bar2_y_reg, bar2_y_b, bar2_y_t, refr_tick, btn, switch)
     	begin
     	bar2_y_next <= bar2_y_reg; -- no move 
 
