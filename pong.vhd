@@ -18,6 +18,7 @@ end pong_graph_st;
 architecture sq_ball_arch of pong_graph_st is
 
    signal refr_tick: std_logic;
+   signal reset_win: std_logic;
 
    signal pix_x: unsigned(9 downto 0); 
    signal pix_y: unsigned(9 downto 0);
@@ -41,20 +42,19 @@ constant WALL_X_R: integer := 35;
    
 -- To track player 1 score
    signal score1_reg, score1_next: unsigned(6 downto 0);
---   signal score1_add_reg, score1_add_next: unsigned(6 downto 0);
---   signal score1: std_logic;
-   --signal SCORE_UP: integer := 1;
    signal win_score1_trig: std_logic;
 
 -- To track player 2 score
    signal score2_reg, score2_next: unsigned(6 downto 0);
---   signal score2_add_reg, score2_add_next: unsigned(6 downto 0);
---   signal score2: std_logic;
    signal win_score2_trig: std_logic;
    
 -- Adding / Subtracting scores
    constant SCORE_UP: unsigned(6 downto 0) := to_unsigned(1,7);
    constant SCORE_DOWN: unsigned(6 downto 0) := unsigned(to_signed(-1,7));
+   
+-- Registers to control reset
+   signal reset_reg, reset_next: unsigned(11 downto 0);
+   constant reset_value : unsigned(11 downto 0) := to_unsigned(600,12);
    
 -- For left bar
    constant BAR2_X_L: integer := 32;
@@ -62,6 +62,8 @@ constant WALL_X_R: integer := 35;
    signal bar2_y_t, bar2_y_b, bar2_y_m: unsigned(9 downto 0);
    constant BAR2_Y_SIZE: integer := 72;
    constant BAR2_YH_SIZE: integer := 31;
+   signal bar_moveD: std_logic;
+   signal bar_moveU: std_logic;
 
    signal bar1_y_reg, bar1_y_next: unsigned(9 downto 0);
    signal bar2_y_reg, bar2_y_next: unsigned(9 downto 0);
@@ -79,16 +81,31 @@ constant WALL_X_R: integer := 35;
    signal ball_x_reg, ball_x_next: unsigned(9 downto 0);
    signal ball_y_reg, ball_y_next: unsigned(9 downto 0);
    signal center: std_logic;
+   
+   --Random Placement for y on scoring
+   signal random_y_next, random_y_reg: unsigned(9 downto 0);
+   constant MIN_RANDOM: unsigned(9 downto 0) := to_unsigned(123, 10);
+   constant MAX_RANDOM: unsigned(9 downto 0) := to_unsigned(315, 10);
+   
+--   -- Delay for ball
+--   signal ball_timer_reg, ball_timer_next: unsigned(7 downto 0);
+--   constant ball_timer: unsigned(7 downto 0) := to_unsigned(180,8);
 
    signal x_delta_reg, x_delta_next:
       unsigned(9 downto 0);
    signal y_delta_reg, y_delta_next:
       unsigned(9 downto 0);
-
+  
+   -- Ball speed signals
+   signal speed_next, speed_reg: unsigned(6 downto 0);
    constant BALL_V_P: unsigned(9 downto 0):=
-   		to_unsigned(4,10);
+   		to_unsigned(2,10);
+   constant BALL_V_PD: unsigned(9 downto 0):=
+   		to_unsigned(8,10);
    constant BALL_V_N: unsigned(9 downto 0):=
-   		unsigned(to_signed(-4,10));
+   		unsigned(to_signed(-2,10));
+   constant BALL_V_NU: unsigned(9 downto 0):=
+   		unsigned(to_signed(-8,10));
 
    type rom_type is array( 0 to 7) of
    		std_logic_vector(0 to 7);
@@ -373,7 +390,7 @@ constant WALL_X_R: integer := 35;
    constant SCORE_X_BOX: unsigned(9 downto 0):=
    		to_unsigned(288,10);
    constant SCORE_Y_BOX: unsigned(9 downto 0):=
-   		unsigned(to_signed(0,10)); 
+   		to_unsigned(0,10); 
    signal word_score_on, sq_word_on: std_logic;
    
    --tile for word P1 WINS
@@ -382,7 +399,7 @@ constant WALL_X_R: integer := 35;
    constant P1WIN_X_BOX: unsigned(9 downto 0):=
    		to_unsigned(128,10);
    constant P1WIN_Y_BOX: unsigned(9 downto 0):=
-   		unsigned(to_signed(128,10)); 
+   	    to_unsigned(128,10); 
    signal word_p1win_on, sq_p1win_on: std_logic;
    
    --tile for word P2 WINS
@@ -391,7 +408,7 @@ constant WALL_X_R: integer := 35;
    constant P2WIN_X_BOX: unsigned(9 downto 0):=
    		to_unsigned(448,10);
    constant P2WIN_Y_BOX: unsigned(9 downto 0):=
-   		unsigned(to_signed(128,10)); 
+   		to_unsigned(128,10); 
    signal word_p2win_on, sq_p2win_on: std_logic;
    
    
@@ -413,10 +430,11 @@ constant WALL_X_R: integer := 35;
    		   bar2_y_reg <= (others => '0');
    		   score1_reg <= (others => '0');
    		   score2_reg <= (others => '0');
---   		   score1_add_reg <= (others => '0');
---   		   score2_add_reg <= (others => '0');
-   		   ball_x_reg <= "0100111111";
+   		   reset_reg <= (others => '0');
+   		   ball_x_reg <= ("0100111111");
    		   ball_y_reg <= (others => '0');
+   		   speed_reg <= (others => '0');
+   		   random_y_reg <= ("0010011001");
    		   x_delta_reg <= ("0000000100");
    		   y_delta_reg <= ("0000000100");
    		elsif (clk'event and clk = '1') then
@@ -424,10 +442,11 @@ constant WALL_X_R: integer := 35;
            bar2_y_reg <= bar2_y_next;
            score1_reg <= score1_next;
            score2_reg <= score2_next;
---           score1_add_reg <= score1_add_next;
---           score2_add_reg <= score2_add_next;
+           reset_reg <= reset_next;
            ball_x_reg <= ball_x_next;
            ball_y_reg <= ball_y_next;
+           speed_reg <= speed_next;
+           random_y_reg <= random_y_next;
            x_delta_reg <= x_delta_next;
            y_delta_reg <= y_delta_next;
    			end if;
@@ -438,6 +457,14 @@ constant WALL_X_R: integer := 35;
 
     refr_tick <= '1' when (pix_y = 1) and (pix_x = 1)
        else '0';
+    
+    reset_next <= reset_reg + 1 when ((win_score1_trig = '1') or (win_score2_trig = '1')) and refr_tick = '1' else
+                  "000000000000"          when reset_reg = reset_value else
+                  reset_reg;
+                  
+--    ball_timer_next <= ball_timer_reg + 1 when center = '1' and refr_tick = '1' else
+--                    "00000000"            when ball_timer_reg = ball_timer else
+--                    ball_timer_reg;
 
 --    wall_on <= '1' when (WALL_X_L <= pix_x) and
 --       (pix_x <= WALL_X_R) else '0';
@@ -462,7 +489,7 @@ constant WALL_X_R: integer := 35;
     process( bar1_y_reg, bar1_y_b, bar1_y_t, refr_tick, btn, switch)
     	begin
     	bar1_y_next <= bar1_y_reg; -- no move 
-
+         
     	if ( refr_tick = '1' ) then
     	   if( switch(2) = '1') then
     	   bar1_y_next <= "0000000001";
@@ -526,9 +553,24 @@ end process;
 	                 ball_x_reg + x_delta_reg when refr_tick = '1'  else
 	                 ball_x_reg;
 	  ball_y_next <= ball_y_reg               when switch(1) = '1'  else
-	                 "0000000000"             when center = '1'     else
+	                 random_y_reg             when center = '1'     else
 	                 ball_y_reg + y_delta_reg when refr_tick = '1'  else 
 	                 ball_y_reg;
+	                 
+--	  random_y_next <= random_y_reg           when random_y_reg = MAX_Y - 1 else
+--	                   random_y_reg + 1       when refr_tick = '1'          else
+--	                   random_y_reg;  
+	                 
+	  process(random_y_reg, refr_tick)
+	     begin
+	     random_y_next <= random_y_reg;
+	     if(refr_tick = '1') then
+	       random_y_next <= random_y_reg + 1;
+	               if (random_y_reg >= MAX_RANDOM) then
+	               random_y_next <= MIN_RANDOM;
+	               end if;
+             end if;
+     end process;
 			 
       --Keep track of each player's score
 --      score1_next <= score1_reg + 1 when score1 = '1' else 
@@ -539,13 +581,17 @@ end process;
        
 	  -- Set the value of the next ball position according to
 	  -- the boundaries.
-	  process(x_delta_reg, y_delta_reg, score1_reg, score2_reg, ball_y_t, ball_x_l, ball_x_r, ball_y_t, ball_y_b, bar1_y_t, bar1_y_b, bar2_y_t, bar2_y_b, center)
+	  process(x_delta_reg, y_delta_reg, score1_reg, score2_reg, reset_reg, ball_y_t, ball_x_l, ball_x_r, ball_y_t, ball_y_b, bar1_y_t, 
+	                   bar1_y_b, bar2_y_t, bar2_y_b, speed_reg, center)
 		  begin
 		  x_delta_next <= x_delta_reg;
 		  y_delta_next <= y_delta_reg;
 		  score1_next <= score1_reg;
 		  score2_next <= score2_reg;
 		  center <= '0';
+		  speed_next <= speed_reg;
+--		  bar_moveU <= '0';
+--		  bar_moveD <= '0';
 		  win_score1_trig <= '0';
 		  win_score2_trig <= '0';
 --		  score1 <= '0'; score2 <= '0';
@@ -554,24 +600,50 @@ end process;
 	           if (score1_reg >= 10) then
 	               win_score1_trig <= '1';
 	               center <= '1';
+	               if (reset_reg >= reset_value) then
+	                   win_score1_trig <= '0';
+	                   speed_next <= "0000000";
+	                   score1_next <= "0000000";
+	                   score2_next <= "0000000";
+	                end if;
 	           elsif (score2_reg >= 10) then
 	               win_score2_trig <= '1';
 	               center <= '1';
+	               if (reset_reg >= reset_value) then
+	                   win_score2_trig <= '0';
+	                   speed_next <= "0000000";
+	                   score1_next <= "0000000";
+	                   score2_next <= "0000000";
+	                end if;
 	           end if;
-		  elsif ( ball_y_t < 1 ) then
+		  elsif ( ball_y_t <= 5 ) then
 			  y_delta_next <= BALL_V_P;
+--			  if (bar_moveD = '1' or bar_moveU = '1') then
+--			  y_delta_next <= BALL_V_PD;
+--			  bar_moveD <= '1';
+--			  bar_moveU <= '1';
+--			  end if;
 	  -- reached bottom, make negative
 		  elsif (ball_y_b > (MAX_Y - 1)) then
 			  y_delta_next <= BALL_V_N;
+--			  if (bar_moveD = '1' or bar_moveU = '1') then
+--			  y_delta_next <= BALL_V_NU;
+--			  bar_moveD <= '1';
+--			  bar_moveU <= '1';
+--			  end if;
 	  -- Reached right, player one scores, center ball
 	      elsif (ball_x_r > 630) then
 	         -- score1_add_next <= SCORE_UP;
 	          center <= '1';
+--	          bar_moveD <= '0'; bar_moveU <= '0';
+              speed_next <= "0000000";
 	          score1_next <= score1_reg + SCORE_UP;
 	  -- Reached left, player two scores, center ball
 	      elsif (ball_x_l <= 20 ) then
 --	          score2_add_next <= SCORE_UP;
 	          center <= '1';
+--	          bar_moveD <= '0'; bar_moveU <= '0';
+              speed_next <= "0000000";
 	          score2_next <= score2_reg + SCORE_UP;
 	  -- left corner of ball inside bar2,
 		  elsif (( ball_x_l <= BAR2_X_R ) and 
@@ -581,11 +653,35 @@ end process;
 		      (ball_y_t <= bar2_y_m)) then
 		           x_delta_next <= BALL_V_P;
 		           y_delta_next <= BALL_V_N;
-		       elsif ((bar2_y_m <= ball_y_b) and
+		           speed_next <= speed_reg + 1;
+		           if (speed_reg <= 3) then
+		              x_delta_next <= unsigned(to_signed(4,10));
+		          end if;
+--		           bar_moveD <= '0'; bar_moveU <= '0';
+--		          if(btn(3) = '1') then
+--		              y_delta_next <= BALL_V_PD;
+--		              bar_moveD <= '1';
+--		          elsif(btn(2) = '1') then
+--		              y_delta_next <= Ball_V_NU;
+--		              bar_moveU <= '1';
+--		          end if;
+		      elsif ((bar2_y_m <= ball_y_b) and
 		      (ball_y_t <= bar2_y_b)) then
 		          x_delta_next <= BALL_V_P;
 		          y_delta_next <= BALL_V_P;
-		  end if;
+		          speed_next <= speed_reg + 1;
+		          if (speed_reg <= 3) then
+		              x_delta_next <= unsigned(to_signed(4,10));
+		          end if;
+--		          bar_moveD <= '0'; bar_moveU <= '0';
+--		          if(btn(3) = '1') then
+--		              y_delta_next <= BALL_V_PD;
+--		              bar_moveD <= '1';
+--		          elsif(btn(2) = '1') then
+--		              y_delta_next <= Ball_V_NU;
+--		              bar_moveU <= '1';
+--		          end if;
+		      end if;
 	  -- right corner of ball inside bar1
 		  elsif ((BAR1_X_L <= ball_x_r) and 
 		  (ball_x_r <= BAR1_X_R)) then
@@ -594,10 +690,34 @@ end process;
 		      (ball_y_t <= bar1_y_m)) then
 		          x_delta_next <= BALL_V_N;
 		          y_delta_next <= BALL_V_N;
+		          speed_next <= speed_reg + 1;
+		          if (speed_reg <= 3) then
+		              x_delta_next <= unsigned(to_signed(-4,10));
+		          end if;
+--		          bar_moveD <= '0'; bar_moveU <= '0';
+--		          if(btn(1) = '1') then
+--		              y_delta_next <= BALL_V_PD;
+--		              bar_moveD <= '1';
+--		          elsif(btn(0) = '1') then
+--		              y_delta_next <= Ball_V_NU;
+--		              bar_moveU <= '1';
+--		          end if;
 		      elsif ((bar1_y_m <= ball_y_b) and
 		      (ball_y_t <= bar1_y_b)) then
 		          x_delta_next <= BALL_V_N;
 		          y_delta_next <= BALL_V_P;
+		          speed_next <= speed_reg + 1;
+		          if (speed_reg <= 3) then
+		              x_delta_next <= unsigned(to_signed(-4,10));
+		          end if;
+--		          bar_moveD <= '0'; bar_moveU <= '0';
+--		          if(btn(1) = '1') then
+--		              y_delta_next <= BALL_V_PD;
+--		              bar_moveD <= '1';
+--		          elsif(btn(0) = '1') then
+--		              y_delta_next <= Ball_V_NU;
+--		              bar_moveU <= '1';
+--		          end if;
 	      end if;
     end if;
 end process;
